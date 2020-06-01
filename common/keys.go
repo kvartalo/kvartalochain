@@ -2,76 +2,109 @@ package common
 
 import (
 	"bytes"
-	"crypto/rand"
 	"encoding/binary"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 
-	"golang.org/x/crypto/ed25519"
-
+	"github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcutil/base58"
 	"golang.org/x/crypto/blake2b"
 )
 
+type PrivateKey struct{ *btcec.PrivateKey }
+type PublicKey struct{ *btcec.PublicKey }
 type Address [32]byte
 
-type PublicKey []byte
-
-type PrivateKey ed25519.PrivateKey
-
 /*
-	the PublicKey & PrivateKey are basically wrappers over golang ed25519,
-	using as Address the blake2b hash, with base58 to string representation
+	the PublicKey & PrivateKey are basically wrappers over golang btcec
+	(https://godoc.org/github.com/btcsuite/btcd/btcec), using as Address
+	the blake2b hash, with base58 to string representation
 */
 
-func NewKey(r io.Reader) (PublicKey, PrivateKey, error) {
-	pk, sk, err := ed25519.GenerateKey(rand.Reader)
-	return PublicKey(pk), PrivateKey(sk), err
+func NewKey() (*PublicKey, *PrivateKey, error) {
+	sk, err := btcec.NewPrivateKey(btcec.S256())
+	if err != nil {
+		return nil, nil, err
+	}
+	pk := sk.PubKey()
+	return &PublicKey{pk}, &PrivateKey{sk}, err
 }
 
-func ImportKey(sk []byte) PrivateKey {
-	return PrivateKey(sk)
+func ImportKey(b []byte) *PrivateKey {
+	sk, _ := btcec.PrivKeyFromBytes(btcec.S256(), b)
+	return &PrivateKey{sk}
 }
-func ImportKeyString(skStr string) PrivateKey {
-	return PrivateKey(base58.Decode(skStr))
-}
-
-func (sk PrivateKey) Public() PublicKey {
-	publicKey := make([]byte, ed25519.PublicKeySize)
-	copy(publicKey, sk[32:])
-	return PublicKey(publicKey)
+func ImportKeyString(skStr string) *PrivateKey {
+	return ImportKey(base58.Decode(skStr))
 }
 
-func (sk PrivateKey) Sign(m []byte) []byte {
-	return ed25519.Sign(ed25519.PrivateKey(sk), m)
+func (sk PrivateKey) Bytes() []byte {
+	return sk.Serialize()
+}
+func (sk PrivateKey) String() string {
+	return base58.Encode(sk.Bytes())
+}
+func (sk PrivateKey) Public() *PublicKey {
+	return &PublicKey{sk.PubKey()}
 }
 
-func (sk PrivateKey) SignTx(tx *Tx) {
+func (sk PrivateKey) HashAndSign(m []byte) ([]byte, error) {
+	h := blake2b.Sum256(m)
+	sig, err := btcec.SignCompact(btcec.S256(), sk.PrivateKey, h[:], false)
+	return sig, err
+}
+
+func (sk PrivateKey) SignTx(tx *Tx) error {
 	txBytes := tx.Bytes()
-	h := blake2b.Sum256(txBytes[:])
-	sig := ed25519.Sign(ed25519.PrivateKey(sk), h[:])
+	sig, err := sk.HashAndSign(txBytes[:])
+	if err != nil {
+		return err
+	}
 	tx.Signature = sig
+	return nil
 }
 
-func VerifySignature(pk PublicKey, msg, sig []byte) bool {
-	return ed25519.Verify(ed25519.PublicKey(pk), msg, sig)
+func VerifySignature(addr *Address, msg, sigB []byte) bool {
+	h := blake2b.Sum256(msg)
+	pkRec, _, err := btcec.RecoverCompact(btcec.S256(), sigB, h[:])
+	if err != nil {
+		return false
+	}
+	publicKeyRec := PublicKey{pkRec}
+	addrRec := publicKeyRec.Address()
+	if !bytes.Equal(addrRec[:], addr[:]) {
+		return false
+	}
+	return true
 }
-func VerifySignatureTx(pk PublicKey, tx *Tx) bool {
+func VerifySignatureTx(addr *Address, tx *Tx) bool {
 	txToHash := tx.Clone()
 	txToHash.Signature = []byte{}
 	txBytes := txToHash.Bytes()
-	h := blake2b.Sum256(txBytes[:])
-	return ed25519.Verify(ed25519.PublicKey(pk), h[:], tx.Signature)
+	h := blake2b.Sum256(txBytes)
+
+	pkRec, _, err := btcec.RecoverCompact(btcec.S256(), tx.Signature, h[:])
+	if err != nil {
+		return false
+	}
+	publicKeyRec := PublicKey{pkRec}
+	addrRec := publicKeyRec.Address()
+	if !bytes.Equal(addrRec[:], addr[:]) {
+		return false
+	}
+	return true
+}
+
+func (pk *PublicKey) Bytes() []byte {
+	return pk.SerializeCompressed()
 }
 
 func (pk *PublicKey) String() string {
-	return base58.Encode([]byte(*pk))
+	return base58.Encode(pk.Bytes())
 }
 
 func (pk *PublicKey) Address() Address {
-	return Address(blake2b.Sum256(*pk))
+	return Address(blake2b.Sum256(pk.Bytes()))
 }
 
 func (a Address) String() string {
@@ -142,24 +175,21 @@ func (tx *Tx) UnmarshalJSON(data []byte) error {
 	return err
 }
 
-func (tx *Tx) Bytes() [144]byte {
-	var b [144]byte
+func (tx *Tx) Bytes() []byte {
+	var b []byte
 	var amount [8]byte
 	binary.LittleEndian.PutUint64(amount[:], tx.Amount)
 	var nonce [8]byte
 	binary.LittleEndian.PutUint64(nonce[:], tx.Nonce)
-	copy(b[:32], tx.From[:32])
-	copy(b[32:64], tx.To[:32])
-	copy(b[64:72], amount[:8])
-	copy(b[72:80], nonce[:8])
-	copy(b[80:144], tx.Signature[:])
+	b = append(b, tx.From[:32]...)
+	b = append(b, tx.To[:32]...)
+	b = append(b, amount[:8]...)
+	b = append(b, nonce[:8]...)
+	b = append(b, tx.Signature[:]...)
 	return b
 }
 
 func TxFromBytes(b []byte) (*Tx, error) {
-	if len(b) != 144 {
-		return nil, errors.New("invalid length")
-	}
 	amount := binary.LittleEndian.Uint64(b[64:72])
 	nonce := binary.LittleEndian.Uint64(b[72:80])
 	var from, to [32]byte
@@ -170,7 +200,7 @@ func TxFromBytes(b []byte) (*Tx, error) {
 		To:        Address(to),
 		Amount:    amount,
 		Nonce:     nonce,
-		Signature: b[80:144],
+		Signature: b[80:],
 	}, nil
 }
 

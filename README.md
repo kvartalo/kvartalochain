@@ -6,6 +6,6 @@ This repo is a work in progress.
 
 ## Details
 - Blockchain based on `Tendermint Core`
-- Keys using `ed25519`
+- Keys & Signatures using `btcec` https://godoc.org/github.com/btcsuite/btcd/btcec
 - Address -> Hash `blake2b` of the `PublicKey` with a `nonce`, encoded in `base58`
 

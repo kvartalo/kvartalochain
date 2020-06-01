@@ -25,11 +25,12 @@ func setDbBalance(db *badger.DB, addr common.Address, balance uint64) {
 	}
 	_ = txn.Commit()
 }
-func simulateTx(kApp *KvartaloABCI, sk common.PrivateKey, from, to common.Address, amount, nonce uint64) (uint32, error) {
+func simulateTx(kApp *KvartaloABCI, sk *common.PrivateKey, from, to common.Address, amount, nonce uint64) (uint32, error) {
 	// create and sign tx
 	tx := common.NewTx(from, to, amount, nonce)
 	sk.SignTx(tx)
-	if !common.VerifySignatureTx(sk.Public(), tx) {
+	addr := sk.Public().Address()
+	if !common.VerifySignatureTx(&addr, tx) {
 		return 4, fmt.Errorf("VerifySignatureTx failed")
 	}
 	txStr, err := json.Marshal(tx)
@@ -65,16 +66,16 @@ func TestKvartaloApplication(t *testing.T) {
 	defer db.Close()
 
 	// initialize keys
-	a := "2jRarmCqNmQJw3gCfDZQEc2Yjhanq38VtW3Ua1toFSFbvQw1U1FUd6ojYcf6Lwbbr52qZMekyPKoXqVjk5a6enrP"
-	b := "5BvqkWp8r8ZiLFk8DTkR2Ju1x6X19yrBE5Z8eGqKjXTRjTspqUbApkpZtBLRgYP2V7YLNWYwt2piur8DimjJMFCh"
+	a := "2NqXcWAZXfCvkVBZLaFAQ1ksEnF6G4fYRSubmUMckXGG"
+	b := "8h3u7NfgvUJsHJgKDUKwwVL1iZd3cwRtntpTfJ5Mefz2"
 	sk0 := common.ImportKeyString(a)
 	pk0 := sk0.Public()
 	addr0 := pk0.Address()
-	assert.Equal(t, "GDB8nUdRW1dM4AhQVmnxoFdbTgvRs8YWSmNvwUgzK2K1", addr0.String())
+	assert.Equal(t, "DqF1B6iqaxeE3j4XvyPfLbba6QkQfQtwSUWBJmnQRMvN", addr0.String())
 	sk1 := common.ImportKeyString(b)
 	pk1 := sk1.Public()
 	addr1 := pk1.Address()
-	assert.Equal(t, "9D42S4YDHbkdqL38gscQCHABj4nJYMTALKEFvZPfix6V", addr1.String())
+	assert.Equal(t, "HzeXxgjb589tVBs991jAyLUX7wreSZvrWnRxdGQS4co2", addr1.String())
 
 	// initialize balances
 	setDbBalance(db, addr0, 10)
