@@ -109,6 +109,15 @@ type Tx struct {
 	Signature []byte  `json:"signature" binding:"required"`
 }
 
+func NewTx(from, to Address, amount uint64) *Tx {
+	return &Tx{
+		From:      from,
+		To:        to,
+		Amount:    amount,
+		Signature: []byte{},
+	}
+}
+
 func (tx *Tx) MarshalJSON() ([]byte, error) {
 	b := tx.Bytes()
 	return json.Marshal(base58.Encode(b[:]))

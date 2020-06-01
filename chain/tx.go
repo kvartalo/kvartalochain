@@ -13,6 +13,7 @@ import (
 func (app *KvartaloABCI) isValid(txRaw []byte) (code uint32) {
 	txBytes, err := hex.DecodeString(string(txRaw))
 	if err != nil {
+		fmt.Println("ASDF", string(txRaw))
 		return 1 // invalid tx format
 	}
 
@@ -22,11 +23,12 @@ func (app *KvartaloABCI) isValid(txRaw []byte) (code uint32) {
 		return 1 // invalid tx format
 	}
 
-	fmt.Println("TXFROM", tx.From[:])
+	fmt.Println("TXFROM", tx.From)
 	senderBalance, err := app.getBalance(tx.From)
 	if err != nil {
 		return 2 // error getting balance
 	}
+	fmt.Println("balance", senderBalance)
 
 	if senderBalance < tx.Amount {
 		fmt.Println("[not enough funds] sender:", tx.From, "\nsenderBalance:", senderBalance, ", tx.Amount:", tx.Amount)
