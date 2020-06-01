@@ -5,7 +5,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"kvartalochain/common"
+	"os"
 	"testing"
 
 	"github.com/dgraph-io/badger"
@@ -16,16 +18,49 @@ import (
 
 func setDbBalance(db *badger.DB, addr common.Address, balance uint64) {
 	var balanceBytes [8]byte
-	binary.BigEndian.PutUint64(balanceBytes[:], balance)
+	binary.LittleEndian.PutUint64(balanceBytes[:], balance)
 	txn := db.NewTransaction(true)
 	if err := txn.Set(addr[:], balanceBytes[:]); err == badger.ErrTxnTooBig {
 		_ = txn.Commit()
 	}
 	_ = txn.Commit()
 }
+func simulateTx(kApp *KvartaloABCI, sk common.PrivateKey, from, to common.Address, amount, nonce uint64) (uint32, error) {
+	// create and sign tx
+	tx := common.NewTx(from, to, amount, nonce)
+	sk.SignTx(tx)
+	if !common.VerifySignatureTx(sk.Public(), tx) {
+		return 4, fmt.Errorf("VerifySignatureTx failed")
+	}
+	txStr, err := json.Marshal(tx)
+	if err != nil {
+		return 4, err
+	}
+	txHex := hex.EncodeToString(txStr)
+
+	// DeliverTx
+	_ = kApp.BeginBlock(abcitypes.RequestBeginBlock{})
+	req := abcitypes.RequestDeliverTx{
+		Tx: []byte(txHex),
+	}
+	res := kApp.DeliverTx(req)
+	_ = kApp.Commit()
+	return res.Code, nil
+}
+func printBalances(t *testing.T, kApp *KvartaloABCI, addrs ...common.Address) {
+	fmt.Println("balances:")
+	for _, addr := range addrs {
+		balance, err := kApp.getBalance(addr)
+		assert.Nil(t, err)
+		fmt.Println("	addr:", addr, " balance:", balance)
+	}
+}
 
 func TestKvartaloApplication(t *testing.T) {
-	db, err := badger.Open(badger.DefaultOptions("/tmp/test-kvartalochain/"))
+	tmpDir, err := ioutil.TempDir("./", "tmpTest")
+	require.Nil(t, err)
+	defer os.RemoveAll(tmpDir)
+	db, err := badger.Open(badger.DefaultOptions(tmpDir).WithLogger(nil))
 	require.Nil(t, err)
 	defer db.Close()
 
@@ -41,42 +76,54 @@ func TestKvartaloApplication(t *testing.T) {
 	addr1 := pk1.Address()
 	assert.Equal(t, "9D42S4YDHbkdqL38gscQCHABj4nJYMTALKEFvZPfix6V", addr1.String())
 
-	// initialize balances at 100
-	setDbBalance(db, addr0, 100)
-	setDbBalance(db, addr1, 100)
+	// initialize balances
+	setDbBalance(db, addr0, 10)
+	setDbBalance(db, addr1, 10)
 
 	kApp := NewKvartaloApplication(db)
-	fmt.Println()
+	printBalances(t, kApp, addr0, addr1)
 
 	// get balance
 	balance, err := kApp.getBalance(addr0)
 	assert.Nil(t, err)
-	assert.Equal(t, uint64(100), balance)
+	assert.Equal(t, uint64(10), balance)
 
-	// create and sign tx
-	tx := common.NewTx(addr0, addr1, 10)
-	sk0.SignTx(tx)
-	assert.NotEqual(t, []byte{}, tx.Signature)
-	assert.True(t, common.VerifySignatureTx(pk0, tx))
-	txStr, err := json.Marshal(tx)
-	assert.Nil(t, err)
-	txHex := hex.EncodeToString(txStr)
-
-	// validate Tx
-	code := kApp.isValid([]byte(txHex))
+	// addr0 send to addr1
+	code, err := simulateTx(kApp, sk0, addr0, addr1, 10, 0)
 	assert.Equal(t, uint32(0), code)
-
-	// DeliverTx
-	_ = kApp.BeginBlock(abcitypes.RequestBeginBlock{})
-	req := abcitypes.RequestDeliverTx{
-		Tx: []byte(txHex),
-	}
-	_ = kApp.DeliverTx(req)
-	_ = kApp.Commit()
 	balance, err = kApp.getBalance(addr0)
 	assert.Nil(t, err)
-	assert.Equal(t, uint64(90), balance)
+	assert.Equal(t, uint64(0), balance)
 	balance, err = kApp.getBalance(addr1)
 	assert.Nil(t, err)
-	assert.Equal(t, uint64(110), balance)
+	assert.Equal(t, uint64(20), balance)
+	printBalances(t, kApp, addr0, addr1)
+
+	// addr0 send to addr1 without funds
+	code, err = simulateTx(kApp, sk0, addr0, addr1, 10, 1)
+	assert.Nil(t, err)
+	assert.Equal(t, ERRNOFUNDS, code) // expect not enough funds
+
+	// addr1 send to addr0
+	code, err = simulateTx(kApp, sk1, addr1, addr0, 10, 0)
+	assert.Nil(t, err)
+	assert.Equal(t, uint32(0), code)
+	printBalances(t, kApp, addr0, addr1) // addr0 and addr1 both have 10
+
+	// addr0 send to addr1 and gets error because of nonce already used
+	code, err = simulateTx(kApp, sk0, addr0, addr1, 10, 0)
+	assert.Nil(t, err)
+	assert.Equal(t, ERRNONCE, code)
+	// addr0 send to addr1 with nonce 1 should work
+	code, err = simulateTx(kApp, sk0, addr0, addr1, 10, 1)
+	assert.Nil(t, err)
+	assert.Equal(t, uint32(0), code)
+	printBalances(t, kApp, addr0, addr1)
+	balance, err = kApp.getBalance(addr0)
+	assert.Nil(t, err)
+	assert.Equal(t, uint64(0), balance)
+	balance, err = kApp.getBalance(addr1)
+	assert.Nil(t, err)
+	assert.Equal(t, uint64(20), balance)
+
 }

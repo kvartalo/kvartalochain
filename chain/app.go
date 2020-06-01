@@ -46,7 +46,7 @@ func (app *KvartaloABCI) DeliverTx(req abcitypes.RequestDeliverTx) abcitypes.Res
 
 	code = app.performTx(req.Tx)
 	if code != 0 {
-		fmt.Println("code", code)
+		// TODO if err, cancel tx, don't Commit()
 		return abcitypes.ResponseDeliverTx{Code: code}
 	}
 

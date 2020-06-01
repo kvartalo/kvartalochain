@@ -106,14 +106,16 @@ type Tx struct {
 	From      Address `json:"from" binding:"required"`
 	To        Address `json:"to" binding:"required"`
 	Amount    uint64  `json:"amount" binding:"required"`
+	Nonce     uint64  `json:"nonce" binding:"required"`
 	Signature []byte  `json:"signature" binding:"required"`
 }
 
-func NewTx(from, to Address, amount uint64) *Tx {
+func NewTx(from, to Address, amount, nonce uint64) *Tx {
 	return &Tx{
 		From:      from,
 		To:        to,
 		Amount:    amount,
+		Nonce:     nonce,
 		Signature: []byte{},
 	}
 }
@@ -135,26 +137,31 @@ func (tx *Tx) UnmarshalJSON(data []byte) error {
 	tx.From = txB.From
 	tx.To = txB.To
 	tx.Amount = txB.Amount
+	tx.Nonce = txB.Nonce
 	tx.Signature = txB.Signature
 	return err
 }
 
-func (tx *Tx) Bytes() [136]byte {
-	var b [136]byte
+func (tx *Tx) Bytes() [144]byte {
+	var b [144]byte
 	var amount [8]byte
-	binary.BigEndian.PutUint64(amount[:], tx.Amount)
+	binary.LittleEndian.PutUint64(amount[:], tx.Amount)
+	var nonce [8]byte
+	binary.LittleEndian.PutUint64(nonce[:], tx.Nonce)
 	copy(b[:32], tx.From[:32])
 	copy(b[32:64], tx.To[:32])
 	copy(b[64:72], amount[:8])
-	copy(b[72:136], tx.Signature[:])
+	copy(b[72:80], nonce[:8])
+	copy(b[80:144], tx.Signature[:])
 	return b
 }
 
 func TxFromBytes(b []byte) (*Tx, error) {
-	if len(b) != 136 {
+	if len(b) != 144 {
 		return nil, errors.New("invalid length")
 	}
-	amount := binary.BigEndian.Uint64(b[64:72])
+	amount := binary.LittleEndian.Uint64(b[64:72])
+	nonce := binary.LittleEndian.Uint64(b[72:80])
 	var from, to [32]byte
 	copy(from[:], b[:32])
 	copy(to[:], b[32:64])
@@ -162,7 +169,8 @@ func TxFromBytes(b []byte) (*Tx, error) {
 		From:      Address(from),
 		To:        Address(to),
 		Amount:    amount,
-		Signature: b[72:136],
+		Nonce:     nonce,
+		Signature: b[80:144],
 	}, nil
 }
 
@@ -171,6 +179,7 @@ func (tx *Tx) Clone() *Tx {
 		From:      tx.From,
 		To:        tx.To,
 		Amount:    tx.Amount,
+		Nonce:     tx.Nonce,
 		Signature: tx.Signature,
 	}
 }
