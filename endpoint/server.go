@@ -13,6 +13,7 @@ func newApiService() *gin.Engine {
 	api.Use(cors.Default())
 	api.GET("/info", handleInfo)
 	api.GET("/balance/:addr", handleGetBalance)
+	api.GET("/nonce/:addr", handleGetNonce)
 	return api
 }
 

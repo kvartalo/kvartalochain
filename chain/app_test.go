@@ -91,6 +91,7 @@ func TestKvartaloApplication(t *testing.T) {
 
 	// addr0 send to addr1
 	code, err := simulateTx(kApp, sk0, addr0, addr1, 10, 0)
+	assert.Nil(t, err)
 	assert.Equal(t, uint32(0), code)
 	balance, err = kApp.getBalance(addr0)
 	assert.Nil(t, err)

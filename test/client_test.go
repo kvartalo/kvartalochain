@@ -26,11 +26,17 @@ var db *badger.DB
 var clienttest bool
 
 var initBalance *bool
-var opositeDirection *bool
+var oppositeDirection *bool
+var addBalance *bool
+var addrFlag *string
+var amountFlag *int
 
 func init() {
 	initBalance = flag.Bool("initBalance", false, "init balance")
-	opositeDirection = flag.Bool("opositeDirection", false, "tx in oposite direction")
+	oppositeDirection = flag.Bool("oppositeDirection", false, "tx in oposite direction")
+	addBalance = flag.Bool("addBalance", false, "Add balance to address")
+	addrFlag = flag.String("addr", "DqF1B6iqaxeE3j4XvyPfLbba6QkQfQtwSUWBJmnQRMvN", "Address to add balance")
+	amountFlag = flag.Int("amount", 0, "Amount to be added")
 	if os.Getenv("CLIENT") == "test" {
 		clienttest = true
 	}
@@ -60,8 +66,6 @@ func printDbBalance(db *badger.DB, addr common.Address) {
 		}
 		if err == nil {
 			return item.Value(func(val []byte) error {
-				fmt.Println("KEY", addr[:])
-				fmt.Println("BYTE", val)
 				balance = binary.LittleEndian.Uint64(val)
 				return err
 			})
@@ -96,10 +100,29 @@ func TestClient(t *testing.T) {
 	}
 	flag.Parse()
 
+	if *addBalance {
+		db, err := badger.Open(badger.DefaultOptions("../data"))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to open badger db: %v", err)
+			os.Exit(1)
+		}
+		defer db.Close()
+
+		fmt.Printf("Add Balance %v to addr %s\n", *amountFlag, *addrFlag)
+		addr, err := common.AddressFromString(*addrFlag)
+		if err != nil {
+			panic(err)
+		}
+		setDbBalance(db, addr, uint64(*amountFlag))
+		printDbBalance(db, addr)
+
+		os.Exit(0)
+	}
+
 	var skStr0, skStr1 string
 	a := "2NqXcWAZXfCvkVBZLaFAQ1ksEnF6G4fYRSubmUMckXGG"
 	b := "8h3u7NfgvUJsHJgKDUKwwVL1iZd3cwRtntpTfJ5Mefz2"
-	if !*opositeDirection {
+	if !*oppositeDirection {
 		skStr0 = a
 		skStr1 = b
 	} else {

@@ -1,11 +1,9 @@
 package endpoint
 
 import (
-	"encoding/binary"
 	"fmt"
 	"kvartalochain/common"
 
-	"github.com/dgraph-io/badger"
 	"github.com/gin-gonic/gin"
 )
 
@@ -44,20 +42,26 @@ func handleGetBalance(c *gin.Context) {
 	})
 }
 
-func getBalance(addr common.Address) (uint64, error) {
-	var balance uint64
-	err := db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get(addr[:])
-		if err != nil && err != badger.ErrKeyNotFound {
-			return err
-		}
-		if err == nil {
-			return item.Value(func(val []byte) error {
-				balance = binary.LittleEndian.Uint64(val)
-				return err
-			})
-		}
-		return nil
+func handleGetNonce(c *gin.Context) {
+	addrStr := c.Param("addr")
+
+	addr, err := common.AddressFromString(addrStr)
+	if err != nil {
+		c.JSON(400, gin.H{
+			"error": err.Error(),
+		})
+	}
+	fmt.Println("get nonce addr", addr, addr.String())
+	nonce, err := getNonce(addr)
+	if err != nil {
+		c.JSON(400, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(200, gin.H{
+		"addr":  addr,
+		"nonce": nonce,
 	})
-	return balance, err
 }
