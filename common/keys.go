@@ -3,8 +3,10 @@ package common
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcutil/base58"
@@ -187,6 +189,20 @@ func (tx *Tx) Bytes() []byte {
 	b = append(b, nonce[:8]...)
 	b = append(b, tx.Signature[:]...)
 	return b
+}
+
+func (tx *Tx) Hex() string {
+	return hex.EncodeToString(tx.Bytes())
+}
+
+func (tx *Tx) String() string {
+	buf := bytes.NewBufferString("")
+	fmt.Fprintf(buf, "From: %v, ", tx.From.String())
+	fmt.Fprintf(buf, "To: %v, ", tx.To.String())
+	fmt.Fprintf(buf, "Amount: %v, ", strconv.Itoa(int(tx.Amount)))
+	fmt.Fprintf(buf, "Nonce: %v, ", strconv.Itoa(int(tx.Nonce)))
+	fmt.Fprintf(buf, "Signature: %v", hex.EncodeToString(tx.Signature))
+	return buf.String()
 }
 
 func TxFromBytes(b []byte) (*Tx, error) {
