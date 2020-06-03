@@ -3,6 +3,8 @@ package endpoint
 import (
 	"fmt"
 	"kvartalochain/common"
+	"kvartalochain/storage"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
@@ -28,7 +30,7 @@ func handleGetBalance(c *gin.Context) {
 		})
 	}
 	fmt.Println("get balance addr", addr, addr.String())
-	balance, err := getBalance(addr)
+	balance, err := storage.GetBalance(db, addr)
 	if err != nil {
 		c.JSON(400, gin.H{
 			"error": err.Error(),
@@ -52,7 +54,7 @@ func handleGetNonce(c *gin.Context) {
 		})
 	}
 	fmt.Println("get nonce addr", addr, addr.String())
-	nonce, err := getNonce(addr)
+	nonce, err := storage.GetNonce(db, addr)
 	if err != nil {
 		c.JSON(400, gin.H{
 			"error": err.Error(),
@@ -64,4 +66,24 @@ func handleGetNonce(c *gin.Context) {
 		"addr":  addr,
 		"nonce": nonce,
 	})
+}
+
+type PostTxMsg struct {
+	TxHex string `json:"txHex"`
+}
+
+func handlePostTx(c *gin.Context) {
+	var m PostTxMsg
+	c.BindJSON(&m)
+	_, err := http.Get("http://127.0.0.1:26657" + `/broadcast_tx_commit?tx="` + m.TxHex + `"`)
+	if err != nil {
+		c.JSON(400, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+	c.JSON(200, gin.H{
+		"status": "ok",
+	})
+
 }
