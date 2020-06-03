@@ -186,11 +186,10 @@ func TestClient(t *testing.T) {
 	assert.True(t, common.VerifySignatureTx(&addr0, tx))
 
 	// send tx
-	txStr, err := json.Marshal(tx)
-	assert.Nil(t, err)
+	txHex := hex.EncodeToString(tx.Bytes())
 
-	fmt.Println("sending", nodeurl+`/broadcast_tx_commit?tx="`+hex.EncodeToString(txStr)+`"`)
-	resp, err := http.Get(nodeurl + `/broadcast_tx_commit?tx="` + hex.EncodeToString(txStr) + `"`)
+	fmt.Println("sending", nodeurl+`/broadcast_tx_commit?tx="`+txHex+`"`)
+	resp, err := http.Get(nodeurl + `/broadcast_tx_commit?tx="` + txHex + `"`)
 	assert.Nil(t, err)
 	fmt.Println(resp)
 

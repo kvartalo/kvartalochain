@@ -87,3 +87,29 @@ func handlePostTx(c *gin.Context) {
 	})
 
 }
+
+func handleGetHistory(c *gin.Context) {
+	addrStr := c.Param("addr")
+	addr, err := common.AddressFromString(addrStr)
+	if err != nil {
+		c.JSON(400, gin.H{
+			"error": err.Error(),
+		})
+	}
+	txCount, err := storage.GetTxCount(db, addr)
+	if err != nil {
+		c.JSON(400, gin.H{
+			"error": err.Error(),
+		})
+	}
+	txs, err := storage.GetAddressHistory(db, addr, txCount)
+	if err != nil {
+		c.JSON(400, gin.H{
+			"error": err.Error(),
+		})
+	}
+
+	c.JSON(200, gin.H{
+		"txs": txs,
+	})
+}

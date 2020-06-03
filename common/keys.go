@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"strconv"
 
@@ -143,6 +142,7 @@ type Tx struct {
 	Amount    uint64  `json:"amount" binding:"required"`
 	Nonce     uint64  `json:"nonce" binding:"required"`
 	Signature []byte  `json:"signature" binding:"required"`
+	// TODO timestamp (outside signature)
 }
 
 func NewTx(from, to Address, amount, nonce uint64) *Tx {
@@ -155,27 +155,27 @@ func NewTx(from, to Address, amount, nonce uint64) *Tx {
 	}
 }
 
-func (tx *Tx) MarshalJSON() ([]byte, error) {
-	b := tx.Bytes()
-	return json.Marshal(base58.Encode(b[:]))
-}
-func (tx *Tx) UnmarshalJSON(data []byte) error {
-	var err error
-	var s string
-	err = json.Unmarshal(data, &s)
-	if err != nil {
-		panic(err)
-	}
-	d := base58.Decode(s)
-	txB, err := TxFromBytes(d)
-
-	tx.From = txB.From
-	tx.To = txB.To
-	tx.Amount = txB.Amount
-	tx.Nonce = txB.Nonce
-	tx.Signature = txB.Signature
-	return err
-}
+// func (tx *Tx) MarshalJSON() ([]byte, error) {
+//         b := tx.Bytes()
+//         return json.Marshal(base58.Encode(b[:]))
+// }
+// func (tx *Tx) UnmarshalJSON(data []byte) error {
+//         var err error
+//         var s string
+//         err = json.Unmarshal(data, &s)
+//         if err != nil {
+//                 panic(err)
+//         }
+//         d := base58.Decode(s)
+//         txB, err := TxFromBytes(d)
+//
+//         tx.From = txB.From
+//         tx.To = txB.To
+//         tx.Amount = txB.Amount
+//         tx.Nonce = txB.Nonce
+//         tx.Signature = txB.Signature
+//         return err
+// }
 
 func (tx *Tx) Bytes() []byte {
 	var b []byte
@@ -206,6 +206,9 @@ func (tx *Tx) String() string {
 }
 
 func TxFromBytes(b []byte) (*Tx, error) {
+	if len(b) < 80 {
+		return nil, fmt.Errorf("error on tx bytes format")
+	}
 	amount := binary.LittleEndian.Uint64(b[64:72])
 	nonce := binary.LittleEndian.Uint64(b[72:80])
 	var from, to [32]byte
