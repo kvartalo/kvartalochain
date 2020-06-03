@@ -3,14 +3,10 @@ package chain
 import (
 	"encoding/binary"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"kvartalochain/common"
-
-	"github.com/dgraph-io/badger"
+	"kvartalochain/storage"
 )
-
-var NONCEKEY = []byte("nonce")
 
 const ERRFORMAT = uint32(1)
 const ERRDB = uint32(2)
@@ -23,13 +19,13 @@ func (app *KvartaloABCI) isValid(txRaw []byte) (code uint32) {
 		return ERRFORMAT // invalid tx format
 	}
 
-	var tx common.Tx
-	err = json.Unmarshal(txBytes, &tx)
+	tx, err := common.TxFromBytes(txBytes)
 	if err != nil {
+		fmt.Println("AI", err)
 		return ERRFORMAT // invalid tx format
 	}
 
-	senderBalance, err := app.getBalance(tx.From)
+	senderBalance, err := storage.GetBalance(app.db, tx.From)
 	if err != nil {
 		return ERRDB // error getting balance
 	}
@@ -43,58 +39,19 @@ func (app *KvartaloABCI) isValid(txRaw []byte) (code uint32) {
 	return code
 }
 
-func (app KvartaloABCI) getBalance(addr common.Address) (uint64, error) {
-	var balance uint64
-	// TODO when addr not found in db, return balance 0
-	err := app.db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get(addr[:])
-		if err != nil && err != badger.ErrKeyNotFound {
-			return err
-		}
-		if err == nil {
-			return item.Value(func(val []byte) error {
-				balance = binary.LittleEndian.Uint64(val)
-				return err
-			})
-		}
-		return nil
-	})
-	return balance, err
-}
-
-func (app KvartaloABCI) getNonce(addr common.Address) (uint64, error) {
-	var nonce uint64
-	err := app.db.View(func(txn *badger.Txn) error {
-		nonceKey := append(NONCEKEY, addr[:]...)
-		item, err := txn.Get(nonceKey)
-		if err != nil && err != badger.ErrKeyNotFound {
-			return err
-		}
-		if err == nil {
-			return item.Value(func(val []byte) error {
-				nonce = binary.LittleEndian.Uint64(val)
-				return err
-			})
-		}
-		return nil
-	})
-	return nonce, err
-}
-
 func (app KvartaloABCI) performTx(txRaw []byte) uint32 {
 	txBytes, err := hex.DecodeString(string(txRaw))
 	if err != nil {
 		return ERRFORMAT // invalid tx format
 	}
-	var tx common.Tx
-	err = json.Unmarshal(txBytes, &tx)
+	tx, err := common.TxFromBytes(txBytes)
 	if err != nil {
 		return ERRFORMAT // invalid tx format
 	}
 
 	// TODO check signature
 
-	dbNonce, err := app.getNonce(tx.From)
+	dbNonce, err := storage.GetNonce(app.db, tx.From)
 	if err != nil {
 		return ERRNONCE // error getting nonce
 	}
@@ -102,11 +59,11 @@ func (app KvartaloABCI) performTx(txRaw []byte) uint32 {
 		return ERRNONCE
 	}
 
-	senderBalance, err := app.getBalance(tx.From)
+	senderBalance, err := storage.GetBalance(app.db, tx.From)
 	if err != nil {
 		return ERRDB // error getting balance
 	}
-	receiverBalance, err := app.getBalance(tx.To)
+	receiverBalance, err := storage.GetBalance(app.db, tx.To)
 	if err != nil {
 		return ERRDB // error getting balance
 	}
@@ -131,9 +88,57 @@ func (app KvartaloABCI) performTx(txRaw []byte) uint32 {
 
 	var newNonce [8]byte
 	binary.LittleEndian.PutUint64(newNonce[:], dbNonce+1)
-	err = app.currentBatch.Set(append(NONCEKEY, tx.From[:]...), newNonce[:])
+	err = app.currentBatch.Set(append(storage.PREFIXNONCE, tx.From[:]...), newNonce[:])
 	if err != nil {
 		return ERRDB
+	}
+
+	// if node is in 'archive' mode, store history of tx
+	if app.archive {
+		// format in DB:
+		// 	key: PREFIXHISTORY | address | count
+		// 	value: tx.Bytes()
+
+		// store tx for sender
+		txFromCount, err := storage.GetTxCount(app.db, tx.From)
+		if err != nil {
+			return ERRDB
+		}
+		key := append(storage.PREFIXHISTORY, tx.From[:]...)
+		var txFromCountBytes [8]byte
+		binary.LittleEndian.PutUint64(txFromCountBytes[:], txFromCount)
+		key = append(key, txFromCountBytes[:]...)
+		err = app.currentBatch.Set(key, tx.Bytes())
+		if err != nil {
+			return ERRDB
+		}
+		txFromCountKey := append(storage.PREFIXHISTORY, tx.From[:]...)
+		var txFromCountBytesNew [8]byte
+		binary.LittleEndian.PutUint64(txFromCountBytesNew[:], txFromCount+1)
+		err = app.currentBatch.Set(txFromCountKey, txFromCountBytesNew[:])
+		if err != nil {
+			return ERRDB
+		}
+		// store tx for receiver
+		txToCount, err := storage.GetTxCount(app.db, tx.To)
+		if err != nil {
+			return ERRDB
+		}
+		key = append(storage.PREFIXHISTORY, tx.To[:]...)
+		var txToCountBytes [8]byte
+		binary.LittleEndian.PutUint64(txToCountBytes[:], txToCount)
+		key = append(key, txToCountBytes[:]...)
+		err = app.currentBatch.Set(key, tx.Bytes())
+		if err != nil {
+			return ERRDB
+		}
+		txToCountKey := append(storage.PREFIXHISTORY, tx.To[:]...)
+		var txToCountBytesNew [8]byte
+		binary.LittleEndian.PutUint64(txToCountBytesNew[:], txToCount+1)
+		err = app.currentBatch.Set(txToCountKey, txToCountBytesNew[:])
+		if err != nil {
+			return ERRDB
+		}
 	}
 
 	// fmt.Println("addr:", tx.From.String(), " balance: ", newSenderBalance)

@@ -9,6 +9,7 @@ import (
 )
 
 type KvartaloABCI struct {
+	archive      bool
 	db           *badger.DB
 	currentBatch *badger.Txn
 }
@@ -17,7 +18,8 @@ var _ abcitypes.Application = (*KvartaloABCI)(nil)
 
 func NewKvartaloApplication(db *badger.DB) *KvartaloABCI {
 	return &KvartaloABCI{
-		db: db,
+		archive: true,
+		db:      db,
 	}
 }
 

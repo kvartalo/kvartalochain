@@ -3,10 +3,10 @@ package chain
 import (
 	"encoding/binary"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"kvartalochain/common"
+	"kvartalochain/storage"
 	"os"
 	"testing"
 
@@ -33,11 +33,7 @@ func simulateTx(kApp *KvartaloABCI, sk *common.PrivateKey, from, to common.Addre
 	if !common.VerifySignatureTx(&addr, tx) {
 		return 4, fmt.Errorf("VerifySignatureTx failed")
 	}
-	txStr, err := json.Marshal(tx)
-	if err != nil {
-		return 4, err
-	}
-	txHex := hex.EncodeToString(txStr)
+	txHex := hex.EncodeToString(tx.Bytes())
 
 	// DeliverTx
 	_ = kApp.BeginBlock(abcitypes.RequestBeginBlock{})
@@ -51,7 +47,7 @@ func simulateTx(kApp *KvartaloABCI, sk *common.PrivateKey, from, to common.Addre
 func printBalances(t *testing.T, kApp *KvartaloABCI, addrs ...common.Address) {
 	fmt.Println("balances:")
 	for _, addr := range addrs {
-		balance, err := kApp.getBalance(addr)
+		balance, err := storage.GetBalance(kApp.db, addr)
 		assert.Nil(t, err)
 		fmt.Println("	addr:", addr, " balance:", balance)
 	}
@@ -85,7 +81,7 @@ func TestKvartaloApplication(t *testing.T) {
 	printBalances(t, kApp, addr0, addr1)
 
 	// get balance
-	balance, err := kApp.getBalance(addr0)
+	balance, err := storage.GetBalance(kApp.db, addr0)
 	assert.Nil(t, err)
 	assert.Equal(t, uint64(10), balance)
 
@@ -93,10 +89,10 @@ func TestKvartaloApplication(t *testing.T) {
 	code, err := simulateTx(kApp, sk0, addr0, addr1, 10, 0)
 	assert.Nil(t, err)
 	assert.Equal(t, uint32(0), code)
-	balance, err = kApp.getBalance(addr0)
+	balance, err = storage.GetBalance(kApp.db, addr0)
 	assert.Nil(t, err)
 	assert.Equal(t, uint64(0), balance)
-	balance, err = kApp.getBalance(addr1)
+	balance, err = storage.GetBalance(kApp.db, addr1)
 	assert.Nil(t, err)
 	assert.Equal(t, uint64(20), balance)
 	printBalances(t, kApp, addr0, addr1)
@@ -121,10 +117,10 @@ func TestKvartaloApplication(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, uint32(0), code)
 	printBalances(t, kApp, addr0, addr1)
-	balance, err = kApp.getBalance(addr0)
+	balance, err = storage.GetBalance(kApp.db, addr0)
 	assert.Nil(t, err)
 	assert.Equal(t, uint64(0), balance)
-	balance, err = kApp.getBalance(addr1)
+	balance, err = storage.GetBalance(kApp.db, addr1)
 	assert.Nil(t, err)
 	assert.Equal(t, uint64(20), balance)
 
