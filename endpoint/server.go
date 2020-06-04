@@ -1,12 +1,15 @@
 package endpoint
 
 import (
+	"kvartalochain/storage"
+
 	"github.com/dgraph-io/badger"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
-var db *badger.DB
+var db *storage.Storage
+var archiveDb *badger.DB
 
 func newApiService() *gin.Engine {
 	api := gin.Default()
@@ -19,7 +22,8 @@ func newApiService() *gin.Engine {
 	return api
 }
 
-func Serve(badgerdb *badger.DB) *gin.Engine {
-	db = badgerdb
+func Serve(sto *storage.Storage, badgerdb *badger.DB) *gin.Engine {
+	db = sto
+	archiveDb = badgerdb
 	return newApiService()
 }

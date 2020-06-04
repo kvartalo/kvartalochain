@@ -65,7 +65,7 @@ func TestSignTxVerifyTx(t *testing.T) {
 	sk0.SignTx(tx)
 	assert.NotEqual(t, []byte{}, tx.Signature)
 
-	assert.True(t, VerifySignatureTx(&addr0, tx))
+	assert.True(t, VerifySignatureTx(tx))
 }
 
 func TestTxMarshalers(t *testing.T) {

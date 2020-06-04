@@ -78,7 +78,7 @@ func VerifySignature(addr *Address, msg, sigB []byte) bool {
 	}
 	return true
 }
-func VerifySignatureTx(addr *Address, tx *Tx) bool {
+func VerifySignatureTx(tx *Tx) bool {
 	txToHash := tx.Clone()
 	txToHash.Signature = []byte{}
 	txBytes := txToHash.Bytes()
@@ -90,7 +90,7 @@ func VerifySignatureTx(addr *Address, tx *Tx) bool {
 	}
 	publicKeyRec := PublicKey{pkRec}
 	addrRec := publicKeyRec.Address()
-	if !bytes.Equal(addrRec[:], addr[:]) {
+	if !bytes.Equal(addrRec[:], tx.From[:]) {
 		return false
 	}
 	return true

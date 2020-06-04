@@ -2,6 +2,7 @@ package chain
 
 import (
 	"fmt"
+	"kvartalochain/storage"
 
 	"github.com/dgraph-io/badger"
 
@@ -10,16 +11,18 @@ import (
 
 type KvartaloABCI struct {
 	archive      bool
-	db           *badger.DB
+	db           *storage.Storage // used for state, balances and nonces
+	archiveDb    *badger.DB       // used for tx history archive
 	currentBatch *badger.Txn
 }
 
 var _ abcitypes.Application = (*KvartaloABCI)(nil)
 
-func NewKvartaloApplication(db *badger.DB) *KvartaloABCI {
+func NewKvartaloApplication(db *storage.Storage, archiveDb *badger.DB) *KvartaloABCI {
 	return &KvartaloABCI{
-		archive: true,
-		db:      db,
+		archive:   true,
+		db:        db,
+		archiveDb: archiveDb,
 	}
 }
 
@@ -56,8 +59,9 @@ func (app *KvartaloABCI) DeliverTx(req abcitypes.RequestDeliverTx) abcitypes.Res
 }
 
 func (app *KvartaloABCI) Commit() abcitypes.ResponseCommit {
-	app.currentBatch.Commit()
-	return abcitypes.ResponseCommit{Data: []byte{}}
+	app.currentBatch.Commit() // store archive history
+	app.db.Commit()           // store chain state
+	return abcitypes.ResponseCommit{Data: app.db.State()}
 }
 
 func (app *KvartaloABCI) Query(reqQuery abcitypes.RequestQuery) (resQuery abcitypes.ResponseQuery) {
@@ -73,7 +77,7 @@ func (app *KvartaloABCI) InitChain(req abcitypes.RequestInitChain) abcitypes.Res
 }
 
 func (app *KvartaloABCI) BeginBlock(req abcitypes.RequestBeginBlock) abcitypes.ResponseBeginBlock {
-	app.currentBatch = app.db.NewTransaction(true)
+	app.currentBatch = app.archiveDb.NewTransaction(true)
 	return abcitypes.ResponseBeginBlock{}
 }
 

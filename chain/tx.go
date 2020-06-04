@@ -12,6 +12,7 @@ const ERRFORMAT = uint32(1)
 const ERRDB = uint32(2)
 const ERRNONCE = uint32(3)
 const ERRNOFUNDS = uint32(4)
+const ERRSIG = uint32(5)
 
 func (app *KvartaloABCI) isValid(txRaw []byte) (code uint32) {
 	txBytes, err := hex.DecodeString(string(txRaw))
@@ -25,11 +26,7 @@ func (app *KvartaloABCI) isValid(txRaw []byte) (code uint32) {
 		return ERRFORMAT // invalid tx format
 	}
 
-	senderBalance, err := storage.GetBalance(app.db, tx.From)
-	if err != nil {
-		return ERRDB // error getting balance
-	}
-
+	senderBalance := storage.GetBalance(app.db, tx.From)
 	if senderBalance < tx.Amount {
 		fmt.Println("[not enough funds] sender:", tx.From, "\nsenderBalance:", senderBalance, ", tx.Amount:", tx.Amount)
 		return ERRNOFUNDS // not enough funds
@@ -49,24 +46,18 @@ func (app KvartaloABCI) performTx(txRaw []byte) uint32 {
 		return ERRFORMAT // invalid tx format
 	}
 
-	// TODO check signature
-
-	dbNonce, err := storage.GetNonce(app.db, tx.From)
-	if err != nil {
-		return ERRNONCE // error getting nonce
+	// check signature
+	if !common.VerifySignatureTx(tx) {
+		return ERRSIG
 	}
+
+	dbNonce := storage.GetNonce(app.db, tx.From)
 	if dbNonce != tx.Nonce {
 		return ERRNONCE
 	}
 
-	senderBalance, err := storage.GetBalance(app.db, tx.From)
-	if err != nil {
-		return ERRDB // error getting balance
-	}
-	receiverBalance, err := storage.GetBalance(app.db, tx.To)
-	if err != nil {
-		return ERRDB // error getting balance
-	}
+	senderBalance := storage.GetBalance(app.db, tx.From)
+	receiverBalance := storage.GetBalance(app.db, tx.To)
 
 	// TODO add checks
 
@@ -75,23 +66,14 @@ func (app KvartaloABCI) performTx(txRaw []byte) uint32 {
 
 	var newSenderBalanceBytes [8]byte
 	binary.LittleEndian.PutUint64(newSenderBalanceBytes[:], newSenderBalance)
-	err = app.currentBatch.Set(tx.From[:], newSenderBalanceBytes[:])
-	if err != nil {
-		return ERRDB
-	}
+	app.db.Set(tx.From[:], newSenderBalanceBytes[:])
 	var newReceiverBalanceBytes [8]byte
 	binary.LittleEndian.PutUint64(newReceiverBalanceBytes[:], newReceiverBalance)
-	err = app.currentBatch.Set(tx.To[:], newReceiverBalanceBytes[:])
-	if err != nil {
-		return ERRDB
-	}
+	app.db.Set(tx.To[:], newReceiverBalanceBytes[:])
 
 	var newNonce [8]byte
 	binary.LittleEndian.PutUint64(newNonce[:], dbNonce+1)
-	err = app.currentBatch.Set(append(storage.PREFIXNONCE, tx.From[:]...), newNonce[:])
-	if err != nil {
-		return ERRDB
-	}
+	app.db.Set(append(storage.PREFIXNONCE, tx.From[:]...), newNonce[:])
 
 	// if node is in 'archive' mode, store history of tx
 	if app.archive {
@@ -100,7 +82,7 @@ func (app KvartaloABCI) performTx(txRaw []byte) uint32 {
 		// 	value: tx.Bytes()
 
 		// store tx for sender
-		txFromCount, err := storage.GetTxCount(app.db, tx.From)
+		txFromCount, err := storage.GetTxCount(app.archiveDb, tx.From)
 		if err != nil {
 			return ERRDB
 		}
@@ -120,7 +102,7 @@ func (app KvartaloABCI) performTx(txRaw []byte) uint32 {
 			return ERRDB
 		}
 		// store tx for receiver
-		txToCount, err := storage.GetTxCount(app.db, tx.To)
+		txToCount, err := storage.GetTxCount(app.archiveDb, tx.To)
 		if err != nil {
 			return ERRDB
 		}
