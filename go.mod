@@ -12,7 +12,9 @@ require (
 	github.com/sirupsen/logrus v1.6.0
 	github.com/spf13/viper v1.7.0
 	github.com/stretchr/testify v1.5.1
+	github.com/tendermint/iavl v0.13.3
 	github.com/tendermint/tendermint v0.33.5
+	github.com/tendermint/tm-db v0.5.1
 	github.com/urfave/cli v1.22.4
 	golang.org/x/crypto v0.0.0-20200510223506-06a226fb4e37
 	gopkg.in/go-playground/assert.v1 v1.2.1

@@ -10,43 +10,23 @@ import (
 var PREFIXNONCE = []byte("nonce")
 var PREFIXHISTORY = []byte("history")
 
-func GetBalance(db *badger.DB, addr common.Address) (uint64, error) {
-	var balance uint64
-	// TODO when addr not found in db, return balance 0
-	err := db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get(addr[:])
-		if err != nil && err != badger.ErrKeyNotFound {
-			return err
-		}
-		if err == nil {
-			return item.Value(func(val []byte) error {
-				balance = binary.LittleEndian.Uint64(val)
-				return err
-			})
-		}
-		return nil
-	})
-	return balance, err
+func GetBalance(db *Storage, addr common.Address) uint64 {
+	balanceBytes := db.Get(addr[:])
+	if len(balanceBytes) == 0 {
+		return uint64(0)
+	}
+	return binary.LittleEndian.Uint64(balanceBytes)
 }
 
-func GetNonce(db *badger.DB, addr common.Address) (uint64, error) {
-	var nonce uint64
-	err := db.View(func(txn *badger.Txn) error {
-		nonceKey := append(PREFIXNONCE, addr[:]...)
-		item, err := txn.Get(nonceKey)
-		if err != nil && err != badger.ErrKeyNotFound {
-			return err
-		}
-		if err == nil {
-			return item.Value(func(val []byte) error {
-				nonce = binary.LittleEndian.Uint64(val)
-				return err
-			})
-		}
-		return nil
-	})
-	return nonce, err
+func GetNonce(db *Storage, addr common.Address) uint64 {
+	nonceKey := append(PREFIXNONCE, addr[:]...)
+	nonceBytes := db.Get(nonceKey)
+	if len(nonceBytes) == 0 {
+		return uint64(0)
+	}
+	return binary.LittleEndian.Uint64(nonceBytes)
 }
+
 func GetTxCount(db *badger.DB, addr common.Address) (uint64, error) {
 	var count uint64
 	err := db.View(func(txn *badger.Txn) error {
