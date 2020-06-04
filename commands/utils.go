@@ -8,6 +8,7 @@ import (
 	"github.com/pkg/errors"
 
 	"kvartalochain/chain"
+	"kvartalochain/storage"
 
 	abci "github.com/tendermint/tendermint/abci/types"
 	cfg "github.com/tendermint/tendermint/config"
@@ -19,23 +20,29 @@ import (
 	"github.com/tendermint/tendermint/proxy"
 )
 
-func loadTendermint(dbpath string) (*nm.Node, *badger.DB) {
+func loadTendermint(dbpath string) (*nm.Node, *storage.Storage, *badger.DB) {
 	fmt.Println("PATH", dbpath)
-	db, err := badger.Open(badger.DefaultOptions(dbpath))
+	db, err := storage.NewStorage(dbpath)
+	if err != nil {
+		logger.Error("failed to open storage db: %v", err)
+		os.Exit(1)
+	}
+
+	archiveDb, err := badger.Open(badger.DefaultOptions(dbpath))
 	if err != nil {
 		logger.Error("failed to open badger db: %v", err)
 		os.Exit(1)
 	}
 	// defer db.Close()
 
-	app := chain.NewKvartaloApplication(db)
+	app := chain.NewKvartaloApplication(db, archiveDb)
 
 	node, err := newTendermint(app)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v", err)
 		os.Exit(2)
 	}
-	return node, db
+	return node, db, archiveDb
 }
 
 // func newTendermint(app abci.Application, configFile string) (*nm.Node, error) {

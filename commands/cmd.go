@@ -22,10 +22,16 @@ var logger = log.NewTMLogger(log.NewSyncWriter(os.Stdout))
 
 var ServerCommands = []cli.Command{
 	{
-		Name:    "init",
+		Name:    "initNode",
 		Aliases: []string{},
 		Usage:   "initialize the database",
-		Action:  cmdInit,
+		Action:  cmdInitNode,
+	},
+	{
+		Name:    "initGenesis",
+		Aliases: []string{},
+		Usage:   "initialize genesis",
+		Action:  cmdInitGenesis,
 	},
 	{
 		Name:    "start",
@@ -41,16 +47,16 @@ var ServerCommands = []cli.Command{
 	},
 }
 
-func cmdInit(c *cli.Context) error {
-	err := initTendermint(config)
+func cmdInitNode(c *cli.Context) error {
+	err := initNode(config)
+	return err
+}
+func cmdInitGenesis(c *cli.Context) error {
+	err := initGenesis(config)
 	return err
 }
 
 func cmdStart(c *cli.Context) error {
-	// if err := config.MustRead(c); err != nil {
-	//         log.Errorf("failed to read config file: %v\n", err)
-	//         return err
-	// }
 	configFile := "tmp/config/config.toml"
 
 	// read config
@@ -66,10 +72,10 @@ func cmdStart(c *cli.Context) error {
 		return errors.Wrap(err, "config is invalid")
 	}
 
-	node, db := loadTendermint(config.DBPath)
+	node, db, archiveDb := loadTendermint(config.DBPath)
 
 	go func() {
-		apiservice := endpoint.Serve(db)
+		apiservice := endpoint.Serve(db, archiveDb)
 		apiservice.Run(":" + "3000")
 		logger.Info("api server running at :" + "3000")
 	}()

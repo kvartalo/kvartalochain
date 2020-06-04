@@ -15,7 +15,7 @@ import (
 	tmtime "github.com/tendermint/tendermint/types/time"
 )
 
-func initTendermint(config *cfg.Config) error {
+func initNode(config *cfg.Config) error {
 	err := os.Mkdir("tmp", os.ModePerm)
 	if err != nil {
 		return err
@@ -47,6 +47,9 @@ func initTendermint(config *cfg.Config) error {
 			"stateFile", privValStateFile)
 	}
 
+	// TODO println of the pv.Address + pub_key, in order to be able to
+	// share the data with the node that will create the genesis file
+
 	nodeKeyFile := config.NodeKeyFile()
 	if tmos.FileExists(nodeKeyFile) {
 		logger.Info("Found node key", "path", nodeKeyFile)
@@ -55,6 +58,37 @@ func initTendermint(config *cfg.Config) error {
 			return err
 		}
 		logger.Info("Generated node key", "path", nodeKeyFile)
+	}
+
+	cfg.WriteConfigFile("tmp/config/config.toml", config)
+
+	return nil
+}
+
+func initGenesis(config *cfg.Config) error {
+
+	configFile := "tmp/config/config.toml"
+	config.RootDir = filepath.Dir(filepath.Dir(configFile))
+
+	// private validator
+	privValKeyFile := config.PrivValidatorKeyFile()
+	privValStateFile := config.PrivValidatorStateFile()
+	var pv *privval.FilePV
+	if tmos.FileExists(privValKeyFile) {
+		pv = privval.LoadFilePV(privValKeyFile, privValStateFile)
+		logger.Info("Found private validator", "keyFile", privValKeyFile,
+			"stateFile", privValStateFile)
+	} else {
+		logger.Error("PrivateKey file not found. Init node first")
+		os.Exit(1)
+	}
+
+	nodeKeyFile := config.NodeKeyFile()
+	if tmos.FileExists(nodeKeyFile) {
+		logger.Info("Found node key", "path", nodeKeyFile)
+	} else {
+		logger.Error("Node key file not found. Init node first")
+		os.Exit(1)
 	}
 
 	// genesis file

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"kvartalochain/common"
 	"kvartalochain/endpoint"
+	"kvartalochain/storage"
 	"net/http"
 	"os"
 	"testing"
@@ -45,36 +46,38 @@ func init() {
 	}
 }
 
-func setDbBalance(db *badger.DB, addr common.Address, balance uint64) {
+func setDbBalance(db *storage.Storage, addr common.Address, balance uint64) {
 	fmt.Println("ADD BALANCE")
 	var balanceBytes [8]byte
 	binary.LittleEndian.PutUint64(balanceBytes[:], balance)
-	txn := db.NewTransaction(true)
-	if err := txn.Set(addr[:], balanceBytes[:]); err == badger.ErrTxnTooBig {
-		_ = txn.Commit()
-	}
-	_ = txn.Commit()
+	db.Set(addr[:], balanceBytes[:])
+	// txn := db.NewTransaction(true)
+	// if err := txn.Set(addr[:], balanceBytes[:]); err == badger.ErrTxnTooBig {
+	//         _ = txn.Commit()
+	// }
+	// _ = txn.Commit()
 }
 
-func printDbBalance(db *badger.DB, addr common.Address) {
+func printDbBalance(db *storage.Storage, addr common.Address) {
 	// view if balance is updated
-	var balance uint64
-	err := db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get(addr[:])
-		if err != nil && err != badger.ErrKeyNotFound {
-			return err
-		}
-		if err == nil {
-			return item.Value(func(val []byte) error {
-				balance = binary.LittleEndian.Uint64(val)
-				return err
-			})
-		}
-		return nil
-	})
-	if err != nil {
-		panic(err)
-	}
+	balance := storage.GetBalance(db, addr)
+	// var balance uint64
+	// err := db.View(func(txn *badger.Txn) error {
+	//         item, err := txn.Get(addr[:])
+	//         if err != nil && err != badger.ErrKeyNotFound {
+	//                 return err
+	//         }
+	//         if err == nil {
+	//                 return item.Value(func(val []byte) error {
+	//                         balance = binary.LittleEndian.Uint64(val)
+	//                         return err
+	//                 })
+	//         }
+	//         return nil
+	// })
+	// if err != nil {
+	//         panic(err)
+	// }
 	fmt.Println("Address:", addr, ", Balance:", balance)
 }
 
@@ -101,12 +104,18 @@ func TestClient(t *testing.T) {
 	flag.Parse()
 
 	if *addBalance {
-		db, err := badger.Open(badger.DefaultOptions("../data"))
+		db, err := storage.NewStorage("../data")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to open storage db: %v", err)
+			os.Exit(1)
+		}
+
+		archiveDb, err := badger.Open(badger.DefaultOptions("../data"))
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "failed to open badger db: %v", err)
 			os.Exit(1)
 		}
-		defer db.Close()
+		defer archiveDb.Close()
 
 		fmt.Printf("Add Balance %v to addr %s\n", *amountFlag, *addrFlag)
 		addr, err := common.AddressFromString(*addrFlag)
@@ -114,6 +123,7 @@ func TestClient(t *testing.T) {
 			panic(err)
 		}
 		setDbBalance(db, addr, uint64(*amountFlag))
+		db.Commit()
 		printDbBalance(db, addr)
 
 		os.Exit(0)
@@ -149,15 +159,21 @@ func TestClient(t *testing.T) {
 	assert.Equal(t, "HzeXxgjb589tVBs991jAyLUX7wreSZvrWnRxdGQS4co2", addr1.String())
 
 	if *initBalance {
-		db, err := badger.Open(badger.DefaultOptions("../data"))
+		db, err := storage.NewStorage("../data")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to open storage db: %v", err)
+			os.Exit(1)
+		}
+		archiveDb, err := badger.Open(badger.DefaultOptions("../data"))
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "failed to open badger db: %v", err)
 			os.Exit(1)
 		}
-		defer db.Close()
+		defer archiveDb.Close()
 		fmt.Println("initBalance flag activated")
 		setDbBalance(db, addr0, 100)
 		setDbBalance(db, addr1, 0)
+		db.Commit()
 		printDbBalance(db, addr0)
 		printDbBalance(db, addr1)
 		os.Exit(0)
@@ -183,7 +199,7 @@ func TestClient(t *testing.T) {
 	sk0.SignTx(tx)
 	assert.NotEqual(t, []byte{}, tx.Signature)
 
-	assert.True(t, common.VerifySignatureTx(&addr0, tx))
+	assert.True(t, common.VerifySignatureTx(tx))
 
 	// send tx
 	txHex := hex.EncodeToString(tx.Bytes())
