@@ -1,4 +1,4 @@
-package commands
+package cmd
 
 import (
 	"fmt"
@@ -28,10 +28,10 @@ var ServerCommands = []cli.Command{
 		Action:  cmdInitNode,
 	},
 	{
-		Name:    "initGenesis",
+		Name:    "initChain",
 		Aliases: []string{},
 		Usage:   "initialize genesis",
-		Action:  cmdInitGenesis,
+		Action:  cmdInitChain,
 	},
 	{
 		Name:    "start",
@@ -51,7 +51,7 @@ func cmdInitNode(c *cli.Context) error {
 	err := initNode(config)
 	return err
 }
-func cmdInitGenesis(c *cli.Context) error {
+func cmdInitChain(c *cli.Context) error {
 	err := initGenesis(config)
 	return err
 }

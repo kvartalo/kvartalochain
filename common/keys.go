@@ -136,7 +136,29 @@ func (a *Address) UnmarshalText(data []byte) error {
 	return nil
 }
 
+type TxType byte
+
+const TxTypeNormal = TxType(0)
+const TxTypeMint = TxType(1)
+
+func TxTypeFromByte(b byte) TxType {
+	return TxType(b)
+}
+
+func (t TxType) String() string {
+	switch t {
+	case TxTypeNormal:
+		return "TxTypeNormal"
+	case TxTypeMint:
+		return "TxTypeMint"
+	default:
+		return "TxTypeUndefined"
+
+	}
+}
+
 type Tx struct {
+	Type      TxType  `json:"type" binding:"required"`
 	From      Address `json:"from" binding:"required"`
 	To        Address `json:"to" binding:"required"`
 	Amount    uint64  `json:"amount" binding:"required"`
@@ -145,8 +167,10 @@ type Tx struct {
 	// TODO timestamp (outside signature)
 }
 
+// NewTx returns a Tx data structure. By default, is a TxTypeNormal tx type.
 func NewTx(from, to Address, amount, nonce uint64) *Tx {
 	return &Tx{
+		Type:      TxTypeNormal,
 		From:      from,
 		To:        to,
 		Amount:    amount,
@@ -183,6 +207,7 @@ func (tx *Tx) Bytes() []byte {
 	binary.LittleEndian.PutUint64(amount[:], tx.Amount)
 	var nonce [8]byte
 	binary.LittleEndian.PutUint64(nonce[:], tx.Nonce)
+	b = append(b, byte(tx.Type))
 	b = append(b, tx.From[:32]...)
 	b = append(b, tx.To[:32]...)
 	b = append(b, amount[:8]...)
@@ -197,6 +222,7 @@ func (tx *Tx) Hex() string {
 
 func (tx *Tx) String() string {
 	buf := bytes.NewBufferString("")
+	fmt.Fprintf(buf, "Type: %v, ", tx.Type.String())
 	fmt.Fprintf(buf, "From: %v, ", tx.From.String())
 	fmt.Fprintf(buf, "To: %v, ", tx.To.String())
 	fmt.Fprintf(buf, "Amount: %v, ", strconv.Itoa(int(tx.Amount)))
@@ -206,25 +232,27 @@ func (tx *Tx) String() string {
 }
 
 func TxFromBytes(b []byte) (*Tx, error) {
-	if len(b) < 80 {
+	if len(b) < 81 {
 		return nil, fmt.Errorf("error on tx bytes format")
 	}
-	amount := binary.LittleEndian.Uint64(b[64:72])
-	nonce := binary.LittleEndian.Uint64(b[72:80])
+	amount := binary.LittleEndian.Uint64(b[65:73])
+	nonce := binary.LittleEndian.Uint64(b[73:81])
 	var from, to [32]byte
-	copy(from[:], b[:32])
-	copy(to[:], b[32:64])
+	copy(from[:], b[1:33])
+	copy(to[:], b[33:65])
 	return &Tx{
+		Type:      TxType(b[0]),
 		From:      Address(from),
 		To:        Address(to),
 		Amount:    amount,
 		Nonce:     nonce,
-		Signature: b[80:],
+		Signature: b[81:],
 	}, nil
 }
 
 func (tx *Tx) Clone() *Tx {
 	return &Tx{
+		Type:      tx.Type,
 		From:      tx.From,
 		To:        tx.To,
 		Amount:    tx.Amount,

@@ -56,6 +56,7 @@ func TestSignTxVerifyTx(t *testing.T) {
 	addr0 := pk0.Address()
 
 	tx := &Tx{
+		Type:      TxTypeNormal,
 		From:      addr0,
 		To:        addr0,
 		Amount:    10,
@@ -75,6 +76,7 @@ func TestTxMarshalers(t *testing.T) {
 	addr0 := pk0.Address()
 
 	tx := &Tx{
+		Type:      TxTypeNormal,
 		From:      addr0,
 		To:        addr0,
 		Amount:    10,
@@ -91,6 +93,29 @@ func TestTxMarshalers(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, tx, &txParsed)
 }
+
+func TestTxBytesParsers(t *testing.T) {
+	skStr0 := "2NqXcWAZXfCvkVBZLaFAQ1ksEnF6G4fYRSubmUMckXGG"
+	sk0 := ImportKeyString(skStr0)
+	pk0 := sk0.Public()
+	addr0 := pk0.Address()
+
+	tx := &Tx{
+		Type:      TxTypeNormal,
+		From:      addr0,
+		To:        addr0,
+		Amount:    10,
+		Nonce:     0,
+		Signature: []byte{},
+	}
+	sk0.SignTx(tx)
+
+	txBytes := tx.Bytes()
+	txParsed, err := TxFromBytes(txBytes)
+	assert.Nil(t, err)
+	assert.Equal(t, tx, txParsed)
+}
+
 func TestAddressFromString(t *testing.T) {
 	addr0, err := AddressFromString("GDB8nUdRW1dM4AhQVmnxoFdbTgvRs8YWSmNvwUgzK2K1")
 	assert.Nil(t, err)
