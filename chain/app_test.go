@@ -30,6 +30,7 @@ func simulateTx(kApp *KvartaloABCI, sk *common.PrivateKey, from, to common.Addre
 		return 4, fmt.Errorf("VerifySignatureTx failed")
 	}
 	txHex := hex.EncodeToString(tx.Bytes())
+	fmt.Println("sender:", from.String())
 
 	// DeliverTx
 	_ = kApp.BeginBlock(abcitypes.RequestBeginBlock{})

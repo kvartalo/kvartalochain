@@ -37,7 +37,7 @@ func (sto *Storage) State() []byte {
 	return sto.tree.Hash()
 }
 
-func (sto *Storage) Commit() {
-	// ver := sto.tree.LatestVersion()
-	sto.tree.SaveVersion()
+func (sto *Storage) Commit() ([]byte, error) {
+	h, _, err := sto.tree.SaveVersion()
+	return h, err
 }

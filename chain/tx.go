@@ -14,22 +14,27 @@ const ERRNONCE = uint32(3)
 const ERRNOFUNDS = uint32(4)
 const ERRSIG = uint32(5)
 
-func (app *KvartaloABCI) isValid(txRaw []byte) (code uint32) {
-	txBytes, err := hex.DecodeString(string(txRaw))
-	if err != nil {
-		return ERRFORMAT // invalid tx format
+func (app *KvartaloABCI) isValid(tx *common.Tx) (code uint32) {
+	// check signature
+	if !common.VerifySignatureTx(tx) {
+		return ERRSIG
 	}
 
-	tx, err := common.TxFromBytes(txBytes)
-	if err != nil {
-		fmt.Println("AI", err)
-		return ERRFORMAT // invalid tx format
-	}
-
-	senderBalance := storage.GetBalance(app.db, tx.From)
-	if senderBalance < tx.Amount {
-		fmt.Println("[not enough funds] sender:", tx.From, "\nsenderBalance:", senderBalance, ", tx.Amount:", tx.Amount)
-		return ERRNOFUNDS // not enough funds
+	switch tx.Type {
+	case common.TxTypeNormal:
+		senderBalance := storage.GetBalance(app.db, tx.From)
+		if senderBalance < tx.Amount {
+			fmt.Println("[not enough funds] sender:", tx.From, "\nsenderBalance:", senderBalance, ", tx.Amount:", tx.Amount)
+			return ERRNOFUNDS // not enough funds
+		}
+		break
+	case common.TxTypeMint:
+		// if tx.From!=minerAddr {
+		//         return ERRNOFUNDS
+		// }
+		break
+	default:
+		code = ERRFORMAT
 	}
 
 	// return 0 code if valid
@@ -46,9 +51,9 @@ func (app KvartaloABCI) performTx(txRaw []byte) uint32 {
 		return ERRFORMAT // invalid tx format
 	}
 
-	// check signature
-	if !common.VerifySignatureTx(tx) {
-		return ERRSIG
+	code := app.isValid(tx) // already checked in CheckTx()
+	if code != 0 {
+		return code
 	}
 
 	dbNonce := storage.GetNonce(app.db, tx.From)
@@ -61,7 +66,10 @@ func (app KvartaloABCI) performTx(txRaw []byte) uint32 {
 
 	// TODO add checks
 
-	newSenderBalance := senderBalance - tx.Amount
+	var newSenderBalance uint64
+	if tx.Type != common.TxTypeMint {
+		newSenderBalance = senderBalance - tx.Amount
+	}
 	newReceiverBalance := receiverBalance + tx.Amount
 
 	var newSenderBalanceBytes [8]byte

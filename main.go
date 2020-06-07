@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"kvartalochain/commands"
+	"kvartalochain/cmd"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -18,7 +18,7 @@ func main() {
 	// }
 
 	app.Commands = []cli.Command{}
-	app.Commands = append(app.Commands, commands.ServerCommands...)
+	app.Commands = append(app.Commands, cmd.ServerCommands...)
 	err := app.Run(os.Args)
 	if err != nil {
 		log.Error(err.Error())

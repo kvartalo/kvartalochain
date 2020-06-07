@@ -10,7 +10,8 @@ tmux split-window -d -t 0 -h
 
 rm -r tmp
 rm -r data
-go run main.go init
+go run main.go initNode
+go run main.go initGenesis
 # cd test && CLIENT=test go test -initBalance && cd ..
 
 tmux send-keys -t 0 'go run main.go start' enter
